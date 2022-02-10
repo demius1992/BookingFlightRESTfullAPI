@@ -4,7 +4,9 @@ import (
 	"BookingFlightRESTfullAPI/Storage"
 	"github.com/gorilla/mux"
 	"log"
+	"math/rand"
 	"net/http"
+	"time"
 )
 
 type AdminStorage struct {
@@ -40,5 +42,19 @@ func main() {
 	router.HandleFunc("/flights/{id:[0-9]+}/", server.UpdateFlightHandler).Methods("PUT")
 	router.HandleFunc("/flights/{id:[0-9]+}/", server.DeleteFlightHandler).Methods("DELETE")
 
+	router.Use(Logging)
+
 	log.Fatal(http.ListenAndServe(":8080", router))
+}
+
+func Logging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, req)
+		s1 := rand.NewSource(time.Now().UnixNano())
+		r1 := rand.New(s1)
+		id := r1.Intn(100)
+		log.Printf("unique id : %d, method: %s, incoming request: %s, request timing: %s",
+			id, req.Method, req.RequestURI, time.Since(start))
+	})
 }
