@@ -3,6 +3,8 @@ package Storage
 import (
 	"encoding/json"
 	"errors"
+	"log"
+	"mime"
 	"net/http"
 	"strconv"
 	"strings"
@@ -52,22 +54,23 @@ func (f *FlightStorage) GetFlight(id int) (Flights, error) {
 	}
 }
 
-func (f *FlightStorage) CreateFlight(flights *Flights) {
+func (f *FlightStorage) CreateFlight(flights *Flights) Flights {
 	f.Lock()
 	defer f.Unlock()
 	flights.Id = f.counter
 	f.flightMap[flights.Id] = *flights
 	f.counter++
+	return f.flightMap[flights.Id]
 }
 
-func (f *FlightStorage) UpdateFlight(id int, flights *Flights) error {
+func (f *FlightStorage) UpdateFlight(id int, flights *Flights) (Flights, error) {
 	f.Lock()
 	defer f.Unlock()
 	if _, ok := f.flightMap[id]; !ok {
-		return errors.New("no such flight")
+		return Flights{}, errors.New("no such flight")
 	} else {
 		f.flightMap[id] = *flights
-		return nil
+		return f.flightMap[id], nil
 	}
 }
 
@@ -83,16 +86,29 @@ func (f *FlightStorage) DeleteFlight(id int) error {
 }
 
 func (f *FlightStorage) createFlightHandler(w http.ResponseWriter, req *http.Request) {
+	log.Printf("handling flight create at %s\n", req.URL.Path)
 	var flights Flights
-	err := json.NewDecoder(req.Body).Decode(&flights)
+	contentType := req.Header.Get("Content-Type")
+	mediatype, _, err := mime.ParseMediaType(contentType)
 	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if mediatype != "application/json" {
+		http.Error(w, "expect application/json Content-Type", http.StatusUnsupportedMediaType)
+		return
+	}
+	err2 := json.NewDecoder(req.Body).Decode(&flights)
+	if err2 != nil {
 		http.Error(w, "problem with ticket creation", http.StatusBadRequest)
 		return
 	}
-	f.CreateFlight(&flights)
+	createFlight := f.CreateFlight(&flights)
+	RenderJSON(w, createFlight)
 }
 
 func (f *FlightStorage) getFlightHandler(w http.ResponseWriter, req *http.Request) {
+	log.Printf("handling flight get at %s\n", req.URL.Path)
 	path := strings.Trim(req.URL.Path, "/")
 	pathParts := strings.Split(path, "/")
 	if len(pathParts) < 2 {
@@ -105,16 +121,11 @@ func (f *FlightStorage) getFlightHandler(w http.ResponseWriter, req *http.Reques
 		http.Error(w, "wrong id or no such flight", http.StatusBadRequest)
 		return
 	}
-	js, err1 := json.Marshal(flight)
-	if err1 != nil {
-		http.Error(w, "problems with json", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(js)
+	RenderJSON(w, flight)
 }
 
 func (f *FlightStorage) updateFlightHandler(w http.ResponseWriter, req *http.Request) {
+	log.Printf("handling flight update at %s\n", req.URL.Path)
 	var flight Flights
 	path := strings.Trim(req.URL.Path, "/")
 	pathParts := strings.Split(path, "/")
@@ -125,13 +136,19 @@ func (f *FlightStorage) updateFlightHandler(w http.ResponseWriter, req *http.Req
 	id, _ := strconv.Atoi(pathParts[1])
 	err := json.NewDecoder(req.Body).Decode(&flight)
 	if err != nil {
-		http.Error(w, "problem with ticket creation", http.StatusBadRequest)
+		http.Error(w, "problem with flight update", http.StatusBadRequest)
 		return
 	}
-	f.UpdateFlight(id, &flight)
+	updateFlight, err2 := f.UpdateFlight(id, &flight)
+	if err2 != nil {
+		http.Error(w, "problem with flight update", http.StatusBadRequest)
+		return
+	}
+	RenderJSON(w, updateFlight)
 }
 
 func (f *FlightStorage) deleteFlightHandler(w http.ResponseWriter, req *http.Request) {
+	log.Printf("handling flight delete at %s\n", req.URL.Path)
 	path := strings.Trim(req.URL.Path, "/")
 	pathParts := strings.Split(path, "/")
 	if len(pathParts) < 2 {
@@ -140,4 +157,5 @@ func (f *FlightStorage) deleteFlightHandler(w http.ResponseWriter, req *http.Req
 	}
 	id, _ := strconv.Atoi(pathParts[1])
 	f.DeleteFlight(id)
+	RenderJSON(w, id)
 }

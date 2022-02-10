@@ -3,6 +3,7 @@ package Storage
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -42,7 +43,6 @@ func NewUserStorage() *UserStorage {
 func (u *UserStorage) GetUser(id int) (Users, error) {
 	u.Lock()
 	defer u.Unlock()
-
 	if user, ok := u.userMap[id]; !ok {
 		return user, errors.New("no such user")
 	} else {
@@ -50,14 +50,14 @@ func (u *UserStorage) GetUser(id int) (Users, error) {
 	}
 }
 
-func (u *UserStorage) UpdateUser(id int, user Users) error {
+func (u *UserStorage) UpdateUser(id int, user Users) (Users, error) {
 	u.Lock()
 	defer u.Unlock()
 	if _, ok := u.userMap[id]; !ok {
-		return errors.New("no such user")
+		return Users{}, errors.New("no such user")
 	} else {
 		u.userMap[id] = user
-		return nil
+		return u.userMap[id], nil
 	}
 }
 
@@ -73,6 +73,7 @@ func (u *UserStorage) DeleteUser(id int) error {
 }
 
 func (u *UserStorage) getUserHandler(w http.ResponseWriter, req *http.Request) {
+	log.Printf("handling user get at %s\n", req.URL.Path)
 	path := strings.Trim(req.URL.Path, "/")
 	pathParts := strings.Split(path, "/")
 	if len(pathParts) < 2 {
@@ -80,22 +81,16 @@ func (u *UserStorage) getUserHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	id, _ := strconv.Atoi(pathParts[1])
-	users, _ := u.GetUser(id)
-	js, err := json.Marshal(users)
+	users, err := u.GetUser(id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	var err2 error
-	_, err2 = w.Write(js)
-	if err2 != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	RenderJSON(w, users)
 }
 
 func (u *UserStorage) UpdateUserHandler(w http.ResponseWriter, req *http.Request) {
+	log.Printf("handling user update at %s\n", req.URL.Path)
 	var user Users
 	path := strings.Trim(req.URL.Path, "/")
 	pathParts := strings.Split(path, "/")
@@ -106,13 +101,19 @@ func (u *UserStorage) UpdateUserHandler(w http.ResponseWriter, req *http.Request
 	id, _ := strconv.Atoi(pathParts[1])
 	err := json.NewDecoder(req.Body).Decode(&user)
 	if err != nil {
-		http.Error(w, "json problem", http.StatusBadRequest)
+		http.Error(w, "problem with user update", http.StatusBadRequest)
 		return
 	}
-	u.UpdateUser(id, user)
+	updateUser, err2 := u.UpdateUser(id, user)
+	if err2 != nil {
+		http.Error(w, "problem with user update", http.StatusBadRequest)
+		return
+	}
+	RenderJSON(w, updateUser)
 }
 
 func (u *UserStorage) DeleteUserHandler(w http.ResponseWriter, req *http.Request) {
+	log.Printf("handling user delete at %s\n", req.URL.Path)
 	path := strings.Trim(req.URL.Path, "/")
 	pathParts := strings.Split(path, "/")
 	if len(pathParts) < 2 {
@@ -125,4 +126,5 @@ func (u *UserStorage) DeleteUserHandler(w http.ResponseWriter, req *http.Request
 		http.Error(w, "expect /user/<id> in user handler", http.StatusBadRequest)
 		return
 	}
+	RenderJSON(w, id)
 }

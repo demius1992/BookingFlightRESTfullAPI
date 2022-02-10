@@ -3,6 +3,8 @@ package Storage
 import (
 	"encoding/json"
 	"errors"
+	"log"
+	"mime"
 	"net/http"
 	"strconv"
 	"strings"
@@ -39,6 +41,15 @@ func NewTicketStorage() *TicketStorage {
 	}
 }
 
+func (t *TicketStorage) CreateTicket(tickets *Tickets) Tickets {
+	t.Lock()
+	defer t.Unlock()
+	tickets.Id = t.counter
+	t.TicketMap[tickets.Id] = *tickets
+	t.counter++
+	return t.TicketMap[tickets.Id]
+}
+
 func (t *TicketStorage) GetTicket(id int) (Tickets, error) {
 	t.Lock()
 	defer t.Unlock()
@@ -49,22 +60,14 @@ func (t *TicketStorage) GetTicket(id int) (Tickets, error) {
 	}
 }
 
-func (t *TicketStorage) CreateTicket(tickets *Tickets) {
-	t.Lock()
-	defer t.Unlock()
-	tickets.Id = t.counter
-	t.TicketMap[tickets.Id] = *tickets
-	t.counter++
-}
-
-func (t *TicketStorage) UpdateTicket(id int, tickets *Tickets) error {
+func (t *TicketStorage) UpdateTicket(id int, tickets *Tickets) (Tickets, error) {
 	t.Lock()
 	defer t.Unlock()
 	if _, ok := t.TicketMap[id]; !ok {
-		return errors.New("no such ticket")
+		return Tickets{}, errors.New("no such ticket")
 	} else {
 		t.TicketMap[id] = *tickets
-		return nil
+		return t.TicketMap[id], nil
 	}
 }
 
@@ -80,18 +83,29 @@ func (t *TicketStorage) DeleteTicket(id int) error {
 }
 
 func (t *TicketStorage) createTicketHandler(w http.ResponseWriter, req *http.Request) {
+	log.Printf("handling ticket create at %s\n", req.URL.Path)
 	var ticket Tickets
-	err := json.NewDecoder(req.Body).Decode(&ticket)
+	contentType := req.Header.Get("Content-Type")
+	mediatype, _, err := mime.ParseMediaType(contentType)
 	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if mediatype != "application/json" {
+		http.Error(w, "expect application/json Content-Type", http.StatusUnsupportedMediaType)
+		return
+	}
+	err2 := json.NewDecoder(req.Body).Decode(&ticket)
+	if err2 != nil {
 		http.Error(w, "problem with ticket creation", http.StatusBadRequest)
 		return
 	}
-	t.CreateTicket(&ticket)
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
+	createTicket := t.CreateTicket(&ticket)
+	RenderJSON(w, createTicket)
 }
 
 func (t *TicketStorage) getTicketHandler(w http.ResponseWriter, req *http.Request) {
+	log.Printf("handling ticket get at %s\n", req.URL.Path)
 	path := strings.Trim(req.URL.Path, "/")
 	pathParts := strings.Split(path, "/")
 	if len(pathParts) < 2 {
@@ -104,16 +118,11 @@ func (t *TicketStorage) getTicketHandler(w http.ResponseWriter, req *http.Reques
 		http.Error(w, "wrong id or no such ticket", http.StatusBadRequest)
 		return
 	}
-	js, err1 := json.Marshal(ticket)
-	if err1 != nil {
-		http.Error(w, "problems with json", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(js)
+	RenderJSON(w, ticket)
 }
 
 func (t *TicketStorage) updateTicketHandler(w http.ResponseWriter, req *http.Request) {
+	log.Printf("handling ticket update at %s\n", req.URL.Path)
 	var ticket Tickets
 	path := strings.Trim(req.URL.Path, "/")
 	pathParts := strings.Split(path, "/")
@@ -124,13 +133,19 @@ func (t *TicketStorage) updateTicketHandler(w http.ResponseWriter, req *http.Req
 	id, _ := strconv.Atoi(pathParts[1])
 	err := json.NewDecoder(req.Body).Decode(&ticket)
 	if err != nil {
-		http.Error(w, "problem with ticket creation", http.StatusBadRequest)
+		http.Error(w, "problem with ticket update", http.StatusBadRequest)
 		return
 	}
-	t.UpdateTicket(id, &ticket)
+	updateTicket, err2 := t.UpdateTicket(id, &ticket)
+	if err2 != nil {
+		http.Error(w, "problem with ticket update", http.StatusBadRequest)
+		return
+	}
+	RenderJSON(w, updateTicket)
 }
 
 func (t *TicketStorage) deleteTicketHandler(w http.ResponseWriter, req *http.Request) {
+	log.Printf("handling ticket delete at %s\n", req.URL.Path)
 	path := strings.Trim(req.URL.Path, "/")
 	pathParts := strings.Split(path, "/")
 	if len(pathParts) < 2 {
@@ -139,4 +154,5 @@ func (t *TicketStorage) deleteTicketHandler(w http.ResponseWriter, req *http.Req
 	}
 	id, _ := strconv.Atoi(pathParts[1])
 	t.DeleteTicket(id)
+	RenderJSON(w, id)
 }

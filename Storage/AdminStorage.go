@@ -1,8 +1,10 @@
 package Storage
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 type AdminStorage struct {
@@ -20,8 +22,12 @@ func NewAdminStorage() *AdminStorage {
 }
 
 func (u *AdminStorage) AdminHandler(w http.ResponseWriter, req *http.Request) {
-	switch req.URL.Path {
-	case "/users/":
+	fullPath := strings.Trim(req.URL.Path, "/")
+	pathParts := strings.Split(fullPath, "/")
+	path := pathParts[0]
+
+	switch path {
+	case "users":
 		{
 			switch req.Method {
 			case http.MethodGet:
@@ -36,7 +42,7 @@ func (u *AdminStorage) AdminHandler(w http.ResponseWriter, req *http.Request) {
 				return
 			}
 		}
-	case "/tickets/":
+	case "tickets":
 		{
 			switch req.Method {
 			case http.MethodPost:
@@ -53,7 +59,7 @@ func (u *AdminStorage) AdminHandler(w http.ResponseWriter, req *http.Request) {
 				return
 			}
 		}
-	case "/flights/":
+	case "flights":
 		{
 			switch req.Method {
 			case http.MethodPost:
@@ -71,4 +77,14 @@ func (u *AdminStorage) AdminHandler(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 	}
+}
+
+func RenderJSON(w http.ResponseWriter, v interface{}) {
+	js, err1 := json.Marshal(v)
+	if err1 != nil {
+		http.Error(w, "problems with json", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(js)
 }
