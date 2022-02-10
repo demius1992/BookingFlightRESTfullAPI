@@ -87,6 +87,8 @@ func (t *TicketStorage) createTicketHandler(w http.ResponseWriter, req *http.Req
 		return
 	}
 	t.CreateTicket(&ticket)
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusOK)
 }
 
 func (t *TicketStorage) getTicketHandler(w http.ResponseWriter, req *http.Request) {

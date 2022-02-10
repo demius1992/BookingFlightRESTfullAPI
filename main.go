@@ -6,6 +6,13 @@ import (
 	"net/http"
 )
 
+//@title
+//@version 1.0
+//@description API Server for Booking flight
+
+//@host localhost:8000
+//@BasePath /
+
 func main() {
 	mux := http.NewServeMux()
 	UsersServer := Storage.NewAdminStorage()
