@@ -1,13 +1,14 @@
 package Storage
 
 import (
+	"BookingFlightRESTfullAPI/Service"
 	"encoding/json"
 	"errors"
+	"github.com/gorilla/mux"
 	"log"
 	"mime"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -58,6 +59,14 @@ func (t *TicketStorage) GetTicket(id int) (Tickets, error) {
 	} else {
 		return ticket, nil
 	}
+	//return Tickets{
+	//	Id:             12,
+	//	Flight:         Flights{},
+	//	User:           Users{},
+	//	Rank:           "economy",
+	//	Price:          1,
+	//	DateOfCreation: time.Time{},
+	//}, nil
 }
 
 func (t *TicketStorage) UpdateTicket(id int, tickets *Tickets) (Tickets, error) {
@@ -82,7 +91,7 @@ func (t *TicketStorage) DeleteTicket(id int) error {
 	}
 }
 
-func (t *TicketStorage) createTicketHandler(w http.ResponseWriter, req *http.Request) {
+func (t *TicketStorage) CreateTicketHandler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("handling ticket create at %s\n", req.URL.Path)
 	var ticket Tickets
 	contentType := req.Header.Get("Content-Type")
@@ -101,36 +110,24 @@ func (t *TicketStorage) createTicketHandler(w http.ResponseWriter, req *http.Req
 		return
 	}
 	createTicket := t.CreateTicket(&ticket)
-	RenderJSON(w, createTicket)
+	Service.RenderJSON(w, createTicket)
 }
 
-func (t *TicketStorage) getTicketHandler(w http.ResponseWriter, req *http.Request) {
+func (t *TicketStorage) GetTicketHandler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("handling ticket get at %s\n", req.URL.Path)
-	path := strings.Trim(req.URL.Path, "/")
-	pathParts := strings.Split(path, "/")
-	if len(pathParts) < 2 {
-		http.Error(w, "expect /ticket/<id> in ticket handler", http.StatusBadRequest)
-		return
-	}
-	id, _ := strconv.Atoi(pathParts[1])
+	id, _ := strconv.Atoi(mux.Vars(req)["id"])
 	ticket, err := t.GetTicket(id)
 	if err != nil {
-		http.Error(w, "wrong id or no such ticket", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	RenderJSON(w, ticket)
+	Service.RenderJSON(w, ticket)
 }
 
-func (t *TicketStorage) updateTicketHandler(w http.ResponseWriter, req *http.Request) {
+func (t *TicketStorage) UpdateTicketHandler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("handling ticket update at %s\n", req.URL.Path)
 	var ticket Tickets
-	path := strings.Trim(req.URL.Path, "/")
-	pathParts := strings.Split(path, "/")
-	if len(pathParts) < 2 {
-		http.Error(w, "expect /user/<id> in user handler", http.StatusBadRequest)
-		return
-	}
-	id, _ := strconv.Atoi(pathParts[1])
+	id, _ := strconv.Atoi(mux.Vars(req)["id"])
 	err := json.NewDecoder(req.Body).Decode(&ticket)
 	if err != nil {
 		http.Error(w, "problem with ticket update", http.StatusBadRequest)
@@ -138,21 +135,18 @@ func (t *TicketStorage) updateTicketHandler(w http.ResponseWriter, req *http.Req
 	}
 	updateTicket, err2 := t.UpdateTicket(id, &ticket)
 	if err2 != nil {
-		http.Error(w, "problem with ticket update", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	RenderJSON(w, updateTicket)
+	Service.RenderJSON(w, updateTicket)
 }
 
-func (t *TicketStorage) deleteTicketHandler(w http.ResponseWriter, req *http.Request) {
+func (t *TicketStorage) DeleteTicketHandler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("handling ticket delete at %s\n", req.URL.Path)
-	path := strings.Trim(req.URL.Path, "/")
-	pathParts := strings.Split(path, "/")
-	if len(pathParts) < 2 {
-		http.Error(w, "expect /ticket/<id> in ticket handler", http.StatusBadRequest)
-		return
+	id, _ := strconv.Atoi(mux.Vars(req)["id"])
+	err := t.DeleteTicket(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
 	}
-	id, _ := strconv.Atoi(pathParts[1])
-	t.DeleteTicket(id)
-	RenderJSON(w, id)
+	Service.RenderJSON(w, id)
 }

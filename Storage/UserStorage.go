@@ -1,12 +1,13 @@
 package Storage
 
 import (
+	"BookingFlightRESTfullAPI/Service"
 	"encoding/json"
 	"errors"
+	"github.com/gorilla/mux"
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -72,33 +73,21 @@ func (u *UserStorage) DeleteUser(id int) error {
 	}
 }
 
-func (u *UserStorage) getUserHandler(w http.ResponseWriter, req *http.Request) {
+func (u *UserStorage) GetUserHandler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("handling user get at %s\n", req.URL.Path)
-	path := strings.Trim(req.URL.Path, "/")
-	pathParts := strings.Split(path, "/")
-	if len(pathParts) < 2 {
-		http.Error(w, "expect /user/<id> in user handler", http.StatusBadRequest)
-		return
-	}
-	id, _ := strconv.Atoi(pathParts[1])
+	id, _ := strconv.Atoi(mux.Vars(req)["id"])
 	users, err := u.GetUser(id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	RenderJSON(w, users)
+	Service.RenderJSON(w, users)
 }
 
 func (u *UserStorage) UpdateUserHandler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("handling user update at %s\n", req.URL.Path)
 	var user Users
-	path := strings.Trim(req.URL.Path, "/")
-	pathParts := strings.Split(path, "/")
-	if len(pathParts) < 2 {
-		http.Error(w, "expect /user/<id> in user handler", http.StatusBadRequest)
-		return
-	}
-	id, _ := strconv.Atoi(pathParts[1])
+	id, _ := strconv.Atoi(mux.Vars(req)["id"])
 	err := json.NewDecoder(req.Body).Decode(&user)
 	if err != nil {
 		http.Error(w, "problem with user update", http.StatusBadRequest)
@@ -106,25 +95,19 @@ func (u *UserStorage) UpdateUserHandler(w http.ResponseWriter, req *http.Request
 	}
 	updateUser, err2 := u.UpdateUser(id, user)
 	if err2 != nil {
-		http.Error(w, "problem with user update", http.StatusBadRequest)
+		http.Error(w, err2.Error(), http.StatusNotFound)
 		return
 	}
-	RenderJSON(w, updateUser)
+	Service.RenderJSON(w, updateUser)
 }
 
 func (u *UserStorage) DeleteUserHandler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("handling user delete at %s\n", req.URL.Path)
-	path := strings.Trim(req.URL.Path, "/")
-	pathParts := strings.Split(path, "/")
-	if len(pathParts) < 2 {
-		http.Error(w, "expect /user/<id> in user handler", http.StatusBadRequest)
-		return
-	}
-	id, _ := strconv.Atoi(pathParts[1])
+	id, _ := strconv.Atoi(mux.Vars(req)["id"])
 	err := u.DeleteUser(id)
 	if err != nil {
-		http.Error(w, "expect /user/<id> in user handler", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	RenderJSON(w, id)
+	Service.RenderJSON(w, id)
 }

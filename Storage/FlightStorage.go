@@ -1,13 +1,14 @@
 package Storage
 
 import (
+	"BookingFlightRESTfullAPI/Service"
 	"encoding/json"
 	"errors"
+	"github.com/gorilla/mux"
 	"log"
 	"mime"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -85,7 +86,7 @@ func (f *FlightStorage) DeleteFlight(id int) error {
 	}
 }
 
-func (f *FlightStorage) createFlightHandler(w http.ResponseWriter, req *http.Request) {
+func (f *FlightStorage) CreateFlightHandler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("handling flight create at %s\n", req.URL.Path)
 	var flights Flights
 	contentType := req.Header.Get("Content-Type")
@@ -104,36 +105,24 @@ func (f *FlightStorage) createFlightHandler(w http.ResponseWriter, req *http.Req
 		return
 	}
 	createFlight := f.CreateFlight(&flights)
-	RenderJSON(w, createFlight)
+	Service.RenderJSON(w, createFlight)
 }
 
-func (f *FlightStorage) getFlightHandler(w http.ResponseWriter, req *http.Request) {
+func (f *FlightStorage) GetFlightHandler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("handling flight get at %s\n", req.URL.Path)
-	path := strings.Trim(req.URL.Path, "/")
-	pathParts := strings.Split(path, "/")
-	if len(pathParts) < 2 {
-		http.Error(w, "expect /flight/<id> in flight handler", http.StatusBadRequest)
-		return
-	}
-	id, _ := strconv.Atoi(pathParts[1])
+	id, _ := strconv.Atoi(mux.Vars(req)["id"])
 	flight, err := f.GetFlight(id)
 	if err != nil {
-		http.Error(w, "wrong id or no such flight", http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	RenderJSON(w, flight)
+	Service.RenderJSON(w, flight)
 }
 
-func (f *FlightStorage) updateFlightHandler(w http.ResponseWriter, req *http.Request) {
+func (f *FlightStorage) UpdateFlightHandler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("handling flight update at %s\n", req.URL.Path)
 	var flight Flights
-	path := strings.Trim(req.URL.Path, "/")
-	pathParts := strings.Split(path, "/")
-	if len(pathParts) < 2 {
-		http.Error(w, "expect /flight/<id> in flight handler", http.StatusBadRequest)
-		return
-	}
-	id, _ := strconv.Atoi(pathParts[1])
+	id, _ := strconv.Atoi(mux.Vars(req)["id"])
 	err := json.NewDecoder(req.Body).Decode(&flight)
 	if err != nil {
 		http.Error(w, "problem with flight update", http.StatusBadRequest)
@@ -141,21 +130,18 @@ func (f *FlightStorage) updateFlightHandler(w http.ResponseWriter, req *http.Req
 	}
 	updateFlight, err2 := f.UpdateFlight(id, &flight)
 	if err2 != nil {
-		http.Error(w, "problem with flight update", http.StatusBadRequest)
+		http.Error(w, err2.Error(), http.StatusNotFound)
 		return
 	}
-	RenderJSON(w, updateFlight)
+	Service.RenderJSON(w, updateFlight)
 }
 
-func (f *FlightStorage) deleteFlightHandler(w http.ResponseWriter, req *http.Request) {
+func (f *FlightStorage) DeleteFlightHandler(w http.ResponseWriter, req *http.Request) {
 	log.Printf("handling flight delete at %s\n", req.URL.Path)
-	path := strings.Trim(req.URL.Path, "/")
-	pathParts := strings.Split(path, "/")
-	if len(pathParts) < 2 {
-		http.Error(w, "expect /ticket/<id> in ticket handler", http.StatusBadRequest)
-		return
+	id, _ := strconv.Atoi(mux.Vars(req)["id"])
+	err := f.DeleteFlight(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
 	}
-	id, _ := strconv.Atoi(pathParts[1])
-	f.DeleteFlight(id)
-	RenderJSON(w, id)
+	Service.RenderJSON(w, id)
 }
